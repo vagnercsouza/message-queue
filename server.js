@@ -1,4 +1,5 @@
 const net = require('net')
+const JsonSocket = require('json-socket')
 
 const consumers = {}
 const bufferedMessages = {}
@@ -13,94 +14,84 @@ const sendMessageToConsumer = (queue, message) => {
     }
 
     consumers[queue][consumerIndex].messages++
-    consumers[queue][consumerIndex].write(message)
+    consumers[queue][consumerIndex].sendMessage(message)
 }
 
 const server = net.createServer(socket => {
-    socket.on('data', data => {
-        const messages = data.toString().split("\n")
+    socket = new JsonSocket(socket)
 
-        for (const message of messages) {
-            const parts = message.split(':', 2)
+    socket.on('message', message => {
+        const { type, queue, data } = message
 
-            if (parts.length < 2) return
-
-            const type = parts[0]
-            const queue = parts[1]
-
-            switch (type) {
-                case 'M':
-                    const content = message.substr(type.length + queue.length + 2)
-
-                    if (!consumers[queue] || consumers[queue].length == 0) {
-                        if (!bufferedMessages[queue]) {
-                            bufferedMessages[queue] = []
-                        }
-
-                        bufferedMessages[queue].push(content)
-
-                        break
+        switch (type) {
+            case 'M':
+                if (!consumers[queue] || consumers[queue].length == 0) {
+                    if (!bufferedMessages[queue]) {
+                        bufferedMessages[queue] = []
                     }
 
-                    sendMessageToConsumer(queue, content + "\n")
+                    bufferedMessages[queue].push(data)
 
                     break
-                case 'C':
-                    socket.isConsumer = true
-                    socket.queue = queue
-                    socket.messages = 0
+                }
 
-                    if (!consumers[queue]) {
-                        consumers[queue] = []
+                sendMessageToConsumer(queue, data)
+
+                break
+            case 'C':
+                socket.isConsumer = true
+                socket.queue = queue
+                socket.messages = 0
+
+                if (!consumers[queue]) {
+                    consumers[queue] = []
+                }
+
+                consumers[queue].push(socket)
+
+                if (bufferedMessages[queue]) {
+                    while (bufferedMessages[queue].length > 0) {
+                        sendMessageToConsumer(queue, bufferedMessages[queue].shift())
                     }
+                }
 
-                    consumers[queue].push(socket)
+                break
+            case 'D':
+                socket.messages -= parseInt(data)
 
-                    if (bufferedMessages[queue]) {
-                        while (bufferedMessages[queue].length > 0) {
-                            sendMessageToConsumer(queue, bufferedMessages[queue].shift() + "\n")
-                        }
-                    }
-
+                break
+            case 'S':
+                if (Object.keys(consumers).length == 0 && Object.keys(bufferedMessages).length == 0) {
+                    socket.sendMessage('')
                     break
-                case 'D':
-                    const messagesDone = parseInt(message.substr(type.length + queue.length + 2))
-                    socket.messages -= messagesDone
+                }
 
-                    break
-                case 'S':
-                    if (Object.keys(consumers).length == 0 && Object.keys(bufferedMessages).length == 0) {
-                        socket.write(JSON.stringify({}) + "\n")
-                        break
+                const counts = {}
+
+                for (const queue in consumers) {
+                    if (!counts[queue]) {
+                        counts[queue] = 0
                     }
 
-                    const counts = {}
+                    for (const consumer of consumers[queue]) {
+                        counts[queue] += consumer.messages
+                    }
+                }
 
-                    for (const queue in consumers) {
-                        if (!counts[queue]) {
-                            counts[queue] = 0
-                        }
-
-                        for (const consumer of consumers[queue]) {
-                            counts[queue] += consumer.messages
-                        }
+                for (const queue in bufferedMessages) {
+                    if (!counts[queue]) {
+                        counts[queue] = 0
                     }
 
-                    for (const queue in bufferedMessages) {
-                        if (!counts[queue]) {
-                            counts[queue] = 0
-                        }
+                    counts[queue] += bufferedMessages[queue].length
+                }
 
-                        counts[queue] += bufferedMessages[queue].length
-                    }
+                socket.sendMessage(counts)
 
-                    socket.write(JSON.stringify(counts) + "\n")
-
-                    break
-                default:
-                    socket.write('UNKNOWN_TYPE' + "\n")
-                    break
-            }
+                break
+            default:
+                socket.sendMessage('UNKNOWN_TYPE')
+                break
         }
     })
 

@@ -1,0 +1,12 @@
+{
+  "name": "message-queue",
+  "version": "1.0.0",
+  "description": "A very simple messages queue.",
+  "main": "server.js",
+  "repository": "git@github.com:vagnercsouza/message-queue.git",
+  "author": "Vagner Cavalcante <vagnercsouzam@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "json-socket": "^0.3.0"
+  }
+}

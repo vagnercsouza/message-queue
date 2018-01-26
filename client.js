@@ -1,47 +1,41 @@
 const net = require('net')
-const client = net.Socket()
+const JsonSocket = require('json-socket')
+
+const socket = new JsonSocket(new net.Socket())
 
 let statsEventHandler = false
 
 const connect = host => {
-    client.connect(2201, host || '127.0.0.1')
+    socket.connect(2201, host || '127.0.0.1')
 
-    client.on('error', e => {
+    socket.on('error', e => {
         console.log(e)
     })
 
-    client.on('close', () => {
+    socket.on('close', () => {
         throw new Error('Connection closed')
+    })
+
+    socket.on('connect', () => {
+        console.log('Connected')
     })
 }
 
-const send = (type, queue = '', message = '') => {
-    client.write(`${type}:${queue}:${message}` + "\n")
+const send = (type, queue = '', data = '') => {
+    socket.sendMessage({ type, queue, data })
 }
 
-const publish = (queue, message) => {
-    send('M', queue, JSON.stringify(message))
+const publish = (queue, data) => {
+    send('M', queue, data)
 }
 
 const consume = (queue, callback) => {
     send('C', queue)
-
-    client.on('data', data => {
-        const messages = data.toString().split("\n").filter(m => m != '')
-
-        for (const message of messages) {
-            try {
-                callback(JSON.parse(message))
-            } catch (e) {
-                console.log(e.message)
-                console.log(message)
-            }
-        }
-    })
+    socket.on('message', callback)
 }
 
 const done = (queue, number) => {
-    send('D', queue, number.toString())
+    send('D', queue, number)
 }
 
 const stats = callback => {
@@ -50,7 +44,7 @@ const stats = callback => {
     if (statsEventHandler) return
     statsEventHandler = true
 
-    client.on('data', data => callback(JSON.parse(data.toString())))
+    socket.on('message', callback)
 }
 
 module.exports = {

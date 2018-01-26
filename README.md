@@ -9,7 +9,6 @@ This is a message queue server that supports multiple producers and consumers.
 - Multiple queues, producers and consumers
 - Each consumer receives different messages
 - The ack is about numbers, not messages *(read more below)*
-- Has its own protocol *(read more below)*
 - Single node only
 
 ## Acknowledgement
@@ -23,56 +22,52 @@ client.connect()
 client.done(1000) // Here you pass the number of messages done
 ```
 
-## Protocol
-
-You can use any TCP client to connect with this server. One connection can be a consumer and a producer, but if it's a consumer it can't be a stats collector and vice versa.
+## Examples
 
 ### Producers
 
-To send messages to the queue, you send a buffer in this format:
+To send messages to the queue use the `publish` function:
 
 ```
-M:<queue name>:<json encoded data>\n
+const client = require('client')
 
-Ex: M:users:{"id":1,"name":"Vagner"}\n // Don't forget the line break
+client.connect()
+client.publish('users', {id: 10})
 ```
 
 ### Consumers
 
-To start receiving messages from the server, you need to set the connection as a consumer:
+To start receiving messages from the server use the `consume` function:
 
 ```
-C:<queue name>
+const client = require('client')
 
-Ex: C:users
-```
-
-After that the server will start sending messagesas json encoded:
-
-```
-{"id":1,"name":"Vagner"}\n
+client.connect()
+client.consume('users', user => {
+    console.log(user) // {id: 10}
+})
 ```
 
 ### Setting the number of processed messages
 
-To set that a number of messages has been processed, you need to send a buffer in this format:
+To set that a number of messages has been processed use the `done` function.
 
 ```
-D:users:1000 // It sets that 1000 messages has been processed.
+const client = require('client')
+
+client.connect()
+client.done(1000) // Here you pass the number of messages done
 ```
 
 ### Stats collector
 
-To get the number of missing messages to be delivered/processed, you need send a buffer in this format:
+To get the number of missing messages to be delivered/processed use the `stats` function:
 
 ```
-S
-```
+const client = require('client')
 
-After that the server will send the current statistics of the queues:
-
+client.connect()
+client.stats(stats => {
+    console.log(stats) // {"users":2134} means that the `users` queue have 2134 missing messages
+})
 ```
-{"users":2134} // It means that the `users` queue have 2134 missing messages
-```
-
-*Note that you have to send the comment every time you want the statistics.*
